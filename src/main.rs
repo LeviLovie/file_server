@@ -1,12 +1,9 @@
 use std::path::Path;
 use std::sync::OnceLock;
-use teloxide::net::Download;
 use teloxide::prelude::*;
-use tokio::fs::File;
 
 #[tokio::main]
 async fn main() {
-    // Check if file ./settings.json exists
     if !std::path::Path::new("./settings.json").exists() {
         match std::fs::write(
             "./settings.json",
@@ -88,7 +85,6 @@ async fn main() {
                     .unwrap();
                 let file = msg.document().unwrap();
 
-                // https://api.telegram.org/bot<bot_token>/getFile?file_id=the_file_id
                 let file_metadata = reqwest::get(format!(
                     "https://api.telegram.org/bot{}/getFile?file_id={}",
                     TOKEN.get().unwrap(),
@@ -101,8 +97,11 @@ async fn main() {
                 let file_path = file_metadata["result"]["file_path"]
                     .as_str()
                     .expect("Error getting file path");
+                let extention = match Path::new(file_path).extension() {
+                    Some(ext) => ext.to_str().unwrap().to_string(),
+                    None => "".to_string(),
+                };
 
-                // https://api.telegram.org/file/bot<token>/<file_path>
                 let one_more_json = reqwest::get(format!(
                     "https://api.telegram.org/file/bot{}/{}",
                     TOKEN.get().unwrap(),
@@ -113,11 +112,22 @@ async fn main() {
                 let file_url = one_more_json.url().to_string();
                 let file_content = reqwest::get(file_url).await.unwrap().bytes().await.unwrap();
                 let hash = format!("{:x}", md5::compute(&file_content)).to_string();
-                let file_path = Path::new(FILES_DIR.get().unwrap()).join(hash.clone());
+                let file_path = Path::new(FILES_DIR.get().unwrap())
+                    .join(hash.clone().to_string() + "." + &extention);
                 std::fs::write(&file_path, file_content).unwrap();
+                let extention = if extention.is_empty() {
+                    "".to_string()
+                } else {
+                    ".".to_string() + &extention
+                };
                 bot.send_message(
                     msg.chat.id,
-                    format!("File saved, checkout {}{}!", URL.get().unwrap(), hash),
+                    format!(
+                        "File saved, checkout {}{}{}!",
+                        URL.get().unwrap(),
+                        hash,
+                        extention
+                    ),
                 )
                 .send()
                 .await
