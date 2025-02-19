@@ -58,8 +58,6 @@ async fn main() {
         std::fs::create_dir_all(FILES_DIR.get().unwrap()).expect("Error creating files directory");
 
         teloxide::repl(bot, |bot: Bot, msg: Message| async move {
-            let mut file_contents = String::new();
-
             if msg.document().is_none() {
                 bot.send_message(msg.chat.id, "Processing text...")
                     .send()
@@ -71,7 +69,17 @@ async fn main() {
                         .await
                         .unwrap();
                 } else {
-                    file_contents = msg.text().unwrap().to_string();
+                    let file_contents = msg.text().unwrap();
+                    let hash = format!("{:x}", md5::compute(file_contents.as_bytes())).to_string();
+                    let file_path = Path::new(FILES_DIR.get().unwrap()).join(hash.clone());
+                    std::fs::write(&file_path, file_contents).unwrap();
+                    bot.send_message(
+                        msg.chat.id,
+                        format!("File saved, checkout {}{}!", URL.get().unwrap(), hash),
+                    )
+                    .send()
+                    .await
+                    .unwrap();
                 }
             } else {
                 bot.send_message(msg.chat.id, "Processing file...")
@@ -104,19 +112,17 @@ async fn main() {
                 .unwrap();
                 let file_url = one_more_json.url().to_string();
                 let file_content = reqwest::get(file_url).await.unwrap().bytes().await.unwrap();
-                file_contents = String::from_utf8(file_content.to_vec()).unwrap();
+                let hash = format!("{:x}", md5::compute(&file_content)).to_string();
+                let file_path = Path::new(FILES_DIR.get().unwrap()).join(hash.clone());
+                std::fs::write(&file_path, file_content).unwrap();
+                bot.send_message(
+                    msg.chat.id,
+                    format!("File saved, checkout {}{}!", URL.get().unwrap(), hash),
+                )
+                .send()
+                .await
+                .unwrap();
             }
-
-            let hash = format!("{:x}", md5::compute(file_contents.as_bytes())).to_string();
-            let file_path = Path::new(FILES_DIR.get().unwrap()).join(hash.clone());
-            std::fs::write(&file_path, file_contents).unwrap();
-            bot.send_message(
-                msg.chat.id,
-                format!("File saved, checkout {}{}!", URL.get().unwrap(), hash),
-            )
-            .send()
-            .await
-            .unwrap();
 
             Ok(())
         })
